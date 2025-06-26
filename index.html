@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Métricas de Pedidos</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h2>Métricas de Pedidos por Categoría</h2>
+  <canvas id="graficoPedidos" width="400" height="200"></canvas>
+
+  <script>
+    // URL completa a la propiedad Pedido en Firebase (con .json al final)
+    const firebaseURL = "https://asi038grupo4-default-rtdb.firebaseio.com/TRABAJOFINAL_GRUPO/Pedido.json";
+
+    fetch(firebaseURL)
+      .then(response => response.json())
+      .then(jsonString => {
+        // Los datos están guardados como texto, así que hay que parsear 2 veces
+        const pedidos = JSON.parse(jsonString);
+
+        // Calcular total por categoría
+        const categorias = {};
+        pedidos.forEach(p => {
+          const categoria = p.Categoria || "Sin categoría";
+          const precio = parseFloat(p.Precio) || 0;
+
+          if (!categorias[categoria]) {
+            categorias[categoria] = 0;
+          }
+          categorias[categoria] += precio;
+        });
+
+        // Preparar datos para el gráfico
+        const etiquetas = Object.keys(categorias);
+        const valores = Object.values(categorias);
+
+        // Crear el gráfico con Chart.js
+        const ctx = document.getElementById('graficoPedidos').getContext('2d');
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: etiquetas,
+            datasets: [{
+              label: 'Total S/ por categoría',
+              data: valores,
+              backgroundColor: 'rgba(75, 192, 192, 0.5)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: function(value) {
+                    return 'S/ ' + value;
+                  }
+                }
+              }
+            }
+          }
+        });
+      })
+      .catch(error => {
+        console.error("Error al cargar los datos desde Firebase:", error);
+      });
+  </script>
+</body>
+</html>
