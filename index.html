@@ -5,122 +5,166 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Métricas de Pedidos</title>
 
-  <!-- Chart.js v4 CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js v4 – funciona en WebViewer -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
   <style>
+    /* ---------- PALETA Y VARIABLES ---------- */
     :root {
-      --primary: 75, 192, 192;         /* base colour once, reuse en CSS y JS */
+      --bg-grad-ini: #e0f7fa;
+      --bg-grad-fin: #ffffff;
+      --card-bg     : #ffffff;
+      --primary     : 75, 192, 192;   /* Teal */
+      --accent      : 255, 99, 132;   /* Corales para detalles */
     }
+
+    /* ---------- RESETEO BÁSICO ---------- */
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: system-ui, sans-serif;
+      font-family: -apple-system, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, var(--bg-grad-ini), var(--bg-grad-fin));
+      color: #333;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 1rem;
-      gap: 1.5rem;
+      padding: 16px 8px;
+      min-height: 100vh;    /* ocupa toda la pantalla */
     }
 
     h2 {
+      margin: 0 0 12px;
+      font-size: 1.3rem;
+      font-weight: 600;
       text-align: center;
-      margin: 0;
+      color: rgb(var(--primary));
     }
 
-    /* Contenedor para que el canvas se adapte */
+    /* ---------- TARJETA CONTENEDORA ---------- */
+    .chart-card {
+      width: 100%;
+      max-width: 600px;          /* se ve perfecto en teléfono y tablet */
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px 10px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    }
+
     .chart-container {
       width: 100%;
-      max-width: 800px;
-      position: relative;   /* necesario para Chart.js responsive */
-      aspect-ratio: 16 / 9; /* mantiene proporción agradable en móviles */
+      /* 4:5 ~ formato vertical – ocupa alto, buena en móviles */
+      aspect-ratio: 4 / 5;
+      position: relative;        /* obligatorio para Chart.js responsive */
     }
 
-    canvas {
+    canvas {                     /* Chart.js expandirá 100 % */
       width: 100% !important;
-      height: 100% !important; /* deja que Chart.js gestione la altura */
+      height: 100% !important;
+    }
+
+    /* ---------- PEQUEÑO DETALLE FOOTER ---------- */
+    footer {
+      font-size: .75rem;
+      margin-top: 10px;
+      opacity: .6;
     }
   </style>
 </head>
 <body>
   <h2>Métricas de Pedidos por Categoría</h2>
 
-  <div class="chart-container">
-    <canvas id="graficoPedidos" aria-label="Gráfico de barras con totales por categoría"></canvas>
-  </div>
+  <section class="chart-card">
+    <div class="chart-container">
+      <canvas id="graficoPedidos" aria-label="Gráfico de barras por categoría"></canvas>
+    </div>
+  </section>
+
+  <footer>Datos en tiempo real desde Firebase</footer>
 
   <script>
-    const firebaseURL =
+    /* URL JSON en Firebase — cámbiala si es otra rama */
+    var firebaseURL =
       "https://asi038grupo4-default-rtdb.firebaseio.com/TRABAJOFINAL_GRUPO/Pedido.json";
 
-    /** Obtiene los datos de Firebase y dibuja el gráfico */
-    async function cargarGrafico() {
-      try {
-        const respuesta = await fetch(firebaseURL);
-        let data = await respuesta.json();
+    /*----- CARGAR DATOS Y PINTAR GRÁFICO -----*/
+    function cargarGrafico() {
+      fetch(firebaseURL)
+        .then(function (resp) { return resp.json(); })
+        .then(function (datos) {
 
-        /* Si el desarrollador guardó el JSON como string, lo parseamos */
-        if (typeof data === "string") {
-          data = JSON.parse(data);
-        }
+          /* Si llega como string, parsearlo; si no, usar tal cual */
+          if (typeof datos === "string") {
+            try { datos = JSON.parse(datos); } catch (e) { datos = {}; }
+          }
+          /* Convertir objeto {id:{…}} a array */
+          var pedidos = Array.isArray(datos)
+            ? datos
+            : Object.keys(datos || {}).map(function (k) { return datos[k]; });
 
-        /* Firebase suele devolver un objeto {id1:{...}, id2:{...}} → lo convertimos a array */
-        const pedidos = Array.isArray(data) ? data : Object.values(data || {});
+          /* Agrupar totales por categoría */
+          var totales = {};
+          pedidos.forEach(function (p) {
+            var cat = p && p.Categoria ? p.Categoria : "Sin categoría";
+            var precio = parseFloat(p && p.Precio ? p.Precio : 0) || 0;
+            if (!totales[cat]) { totales[cat] = 0; }
+            totales[cat] += precio;
+          });
 
-        /* Agrupar totales por categoría */
-        const categorias = pedidos.reduce((acc, p) => {
-          const categoria = p?.Categoria || "Sin categoría";
-          const precio = parseFloat(p?.Precio) || 0;
-          acc[categoria] = (acc[categoria] || 0) + precio;
-          return acc;
-        }, {});
-
-        dibujarGrafico({
-          etiquetas: Object.keys(categorias),
-          valores: Object.values(categorias)
+          dibujarGrafico(Object.keys(totales), Object.values(totales));
+        })
+        .catch(function (err) {
+          console.error("Error al cargar datos:", err);
+          alert("No se pudieron cargar los datos. Verifique su conexión.");
         });
-      } catch (err) {
-        console.error("Error al cargar los datos desde Firebase:", err);
-        alert("No se pudieron cargar los datos. Intente más tarde.");
-      }
     }
 
-    /** Dibuja el gráfico con Chart.js */
-    function dibujarGrafico({ etiquetas, valores }) {
-      const ctx = document.getElementById("graficoPedidos");
+    /*----- FUNCIÓN PARA PINTAR CON CHART.JS -----*/
+    function dibujarGrafico(labels, data) {
+      var ctx = document.getElementById("graficoPedidos").getContext("2d");
+
+      /* Generar gama de colores por barra */
+      var colores = labels.map(function (_, i) {
+        var base = "rgba(" + (i % 2 ? "--primary" : "--accent") + ", 0.6)";
+        return base.replace("--primary", "75,192,192")
+                   .replace("--accent", "255,99,132");
+      });
 
       new Chart(ctx, {
         type: "bar",
         data: {
-          labels: etiquetas,
-          datasets: [
-            {
-              label: "Total S/ por categoría",
-              data: valores,
-              backgroundColor: `rgba(var(--primary), 0.5)`,
-              borderColor: `rgb(var(--primary))`,
-              borderWidth: 1
-            }
-          ]
+          labels: labels,
+          datasets: [{
+            label: "Total S/ por categoría",
+            data: data,
+            backgroundColor: colores,
+            borderColor: colores.map(function(c){ return c.replace("0.6", "1"); }),
+            borderWidth: 1,
+            borderRadius: 4
+          }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 800 },
           plugins: {
             tooltip: {
               callbacks: {
-                label: (ctx) => `S/ ${ctx.parsed.y.toFixed(2)}`
+                label: function (ctx) {
+                  return "S/ " + ctx.parsed.y.toFixed(2);
+                }
               }
             },
-            legend: {
-              display: false
-            }
+            legend: { display: false }
           },
           scales: {
+            x: {
+              ticks: { maxRotation: 40, minRotation: 0 }
+            },
             y: {
               beginAtZero: true,
               ticks: {
-                callback: (value) => `S/ ${value}`
+                callback: function (value) { return "S/ " + value; }
               }
             }
           }
@@ -128,8 +172,8 @@
       });
     }
 
-    /* Inicializar */
-    cargarGrafico();
+    /* Iniciar cuando cargue la WebView */
+    window.onload = cargarGrafico;
   </script>
 </body>
 </html>
