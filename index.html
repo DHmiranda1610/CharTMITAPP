@@ -1,71 +1,179 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Métricas de Pedidos</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta charset="UTF-8">
+    <title>Métricas de Pedidos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f4f4f4;
+            color: #333;
+            box-sizing: border-box;
+            display: flex; /* Usar flexbox para centrar contenido vertical y horizontalmente si la pantalla es muy grande */
+            justify-content: center;
+            align-items: flex-start; /* Alinea al inicio verticalmente */
+            min-height: 100vh; /* Ocupa al menos la altura de la ventana */
+        }
+        .main-wrapper { /* Nuevo contenedor para controlar el ancho máximo en PC */
+            max-width: 800px; /* Ancho máximo para PC, para que no se estire demasiado */
+            width: 100%; /* Ocupa todo el ancho disponible en móviles */
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin: 20px 0; /* Margen superior e inferior para espacio en PC */
+        }
+        h1, h2 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #e9ecef;
+        }
+        canvas {
+            max-width: 100% !important;
+            height: auto !important; /* Permite que Chart.js ajuste la altura */
+            display: block;
+            margin: 20px auto;
+        }
+
+        /* Opcional: Ajustes específicos para pantallas muy pequeñas si el gráfico se ve apretado */
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.8em;
+            }
+            h2 {
+                font-size: 1.4em;
+            }
+            .metric-value {
+                font-size: 1.2em;
+            }
+            .main-wrapper {
+                padding: 15px; /* Un poco menos de padding en pantallas muy pequeñas */
+                margin: 10px 0;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h2>Métricas de Pedidos por Categoría</h2>
-  <canvas id="graficoPedidos" width="400" height="200"></canvas>
+    <div class="main-wrapper">
+        <h1>Métricas de Pedidos</h1>
 
-  <script>
-    // URL completa a la propiedad Pedido en Firebase (con .json al final)
-    const firebaseURL = "https://asi038grupo4-default-rtdb.firebaseio.com/TRABAJOFINAL_GRUPO/Pedido.json";
+        <div class="metric-value">
+            Total de Pedidos: <span id="totalPedidosCount">Cargando...</span>
+        </div>
 
-    fetch(firebaseURL)
-      .then(response => response.json())
-      .then(jsonString => {
-        // Los datos están guardados como texto, así que hay que parsear 2 veces
-        const pedidos = JSON.parse(jsonString);
+        <h2>Monto Total por Categoría</h2>
+        <canvas id="graficoPedidos" width="400" height="200"></canvas>
+    </div>
 
-        // Calcular total por categoría
-        const categorias = {};
-        pedidos.forEach(p => {
-          const categoria = p.Categoria || "Sin categoría";
-          const precio = parseFloat(p.Precio) || 0;
+    <script>
+        const firebaseURL = "https://asi038grupo4-default-rtdb.firebaseio.com/TRABAJOFINAL_GRUPO/Pedido.json";
 
-          if (!categorias[categoria]) {
-            categorias[categoria] = 0;
-          }
-          categorias[categoria] += precio;
-        });
-
-        // Preparar datos para el gráfico
-        const etiquetas = Object.keys(categorias);
-        const valores = Object.values(categorias);
-
-        // Crear el gráfico con Chart.js
-        const ctx = document.getElementById('graficoPedidos').getContext('2d');
-        new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: etiquetas,
-            datasets: [{
-              label: 'Total S/ por categoría',
-              data: valores,
-              backgroundColor: 'rgba(75, 192, 192, 0.5)',
-              borderColor: 'rgba(75, 192, 192, 1)',
-              borderWidth: 1
-            }]
-          },
-          options: {
-            scales: {
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  callback: function(value) {
-                    return 'S/ ' + value;
-                  }
+        fetch(firebaseURL)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
                 }
-              }
-            }
-          }
-        });
-      })
-      .catch(error => {
-        console.error("Error al cargar los datos desde Firebase:", error);
-      });
-  </script>
+                return response.json();
+            })
+            .then(dataFromFirebase => {
+                let pedidos;
+                try {
+                    pedidos = JSON.parse(dataFromFirebase);
+                } catch (e) {
+                    pedidos = dataFromFirebase;
+                }
+
+                if (!Array.isArray(pedidos)) {
+                    console.error("Los datos finales no son una lista de pedidos:", pedidos);
+                    document.getElementById('totalPedidosCount').innerText = "Error de datos";
+                    return;
+                }
+
+                document.getElementById('totalPedidosCount').innerText = pedidos.length;
+
+                const categorias = {};
+                pedidos.forEach(p => {
+                    const categoria = p.Categoria || "Sin categoría";
+                    const precio = parseFloat(p.Precio) || 0;
+
+                    if (!categorias[categoria]) {
+                        categorias[categoria] = 0;
+                    }
+                    categorias[categoria] += precio;
+                });
+
+                const etiquetas = Object.keys(categorias);
+                const valores = Object.values(categorias);
+
+                const ctx = document.getElementById('graficoPedidos').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: etiquetas,
+                        datasets: [{
+                            label: 'Monto Total S/ por Categoría',
+                            data: valores,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
+                                'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                                'rgba(199, 199, 199, 0.7)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+                                'rgba(199, 199, 199, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return 'S/ ' + value;
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                            },
+                            title: {
+                                display: false,
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("Error al cargar los datos desde Firebase:", error);
+                document.getElementById('totalPedidosCount').innerText = "Error al cargar datos.";
+                const ctx = document.getElementById('graficoPedidos').getContext('2d');
+                ctx.font = '16px Arial';
+                ctx.fillStyle = 'red';
+                ctx.textAlign = 'center';
+                ctx.fillText('No se pudieron cargar los datos del gráfico.', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            });
+    </script>
 </body>
 </html>
